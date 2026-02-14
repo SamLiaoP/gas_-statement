@@ -207,7 +207,7 @@ def style_output(filepath: str, df: pd.DataFrame):
 
 
 def main():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     internal_path, year, month = find_internal_file(base_dir)
 
     channels_data = []
