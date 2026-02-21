@@ -2,12 +2,13 @@
 # 加油站支付對帳系統
 # 用途：自動比對內帳（115.XX.xlsx）與各支付管道（LinePay、中油Pay）的交易明細
 # 主要功能：
-#   1. 自動偵測同目錄下的內帳檔案（NNN.MM.xlsx 格式）
-#   2. 讀取內帳金額表 sheet，解析各支付管道每日金額
-#   3. 讀取各支付管道明細檔，解析每日交易金額
-#   4. 比對內帳 vs 明細，產出對帳結果 Excel（含差異標記和紅色高亮）
-# 輸入：115.XX.xlsx（內帳）、linepay明細.xlsx、中油pay明細.xls
-# 輸出：對帳結果_YYYYMM.xlsx
+#   1. 掃描 報表/ 底下所有月份資料夾（YYYYMM），自動判斷哪些尚未處理
+#   2. 自動偵測資料夾內的內帳檔案（NNN.MM.xlsx 格式）
+#   3. 讀取內帳金額表 sheet，解析各支付管道每日金額
+#   4. 讀取各支付管道明細檔，解析每日交易金額
+#   5. 比對內帳 vs 明細，產出對帳結果 Excel（含差異標記和紅色高亮）
+# 輸入：報表/{YYYYMM}/115.XX.xlsx（內帳）、linepay明細.xlsx、中油pay明細.xls
+# 輸出：報表/{YYYYMM}/對帳結果_YYYYMM.xlsx
 # 執行方式：按兩下 main.py 或 python3 main.py
 ### End Spec ###
 
@@ -98,7 +99,7 @@ def read_internal(filepath: str, label: str) -> DayAmount:
 
 
 def find_internal_file(base_dir: str) -> tuple:
-    """自動找內帳檔案，回傳 (filepath, 西元年, 月份)"""
+    """自動找內帳檔案，回傳 (filepath, 西元年, 月份) 或 None"""
     pattern = re.compile(r'^(\d+)\.(\d{2})\.xlsx$')
     matches = []
     for f in os.listdir(base_dir):
@@ -109,19 +110,14 @@ def find_internal_file(base_dir: str) -> tuple:
             matches.append((f, roc_year + 1911, month))
 
     if not matches:
-        print("錯誤：找不到內帳檔案（格式：NNN.MM.xlsx）")
-        sys.exit(1)
+        return None
 
     if len(matches) == 1:
         f, year, month = matches[0]
-        print(f"偵測到內帳：{f}（{year}年{month}月）")
         return os.path.join(base_dir, f), year, month
 
-    print("找到多個內帳檔案，請選擇：")
-    for i, (f, year, month) in enumerate(matches):
-        print(f"  {i + 1}. {f}（{year}年{month}月）")
-    choice = int(input("請輸入編號：")) - 1
-    f, year, month = matches[choice]
+    # 多個檔案時取第一個（資料夾內理論上只有一個月份）
+    f, year, month = matches[0]
     return os.path.join(base_dir, f), year, month
 
 
@@ -206,45 +202,81 @@ def style_output(filepath: str, df: pd.DataFrame):
     wb.save(filepath)
 
 
-def main():
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    internal_path, year, month = find_internal_file(base_dir)
+def process_folder(folder_path: str, folder_name: str):
+    """處理單一月份資料夾的對帳"""
+    # 檢查輸出檔是否已存在
+    output_name = f"對帳結果_{folder_name}.xlsx"
+    output_path = os.path.join(folder_path, output_name)
+    if os.path.exists(output_path):
+        print(f"  已有 {output_name}，跳過")
+        return
+
+    # 找內帳
+    result = find_internal_file(folder_path)
+    if result is None:
+        print(f"  找不到內帳檔案，跳過")
+        return
+    internal_path, year, month = result
+    print(f"  內帳：{os.path.basename(internal_path)}（{year}年{month}月）")
 
     channels_data = []
     for ch in CHANNELS:
-        print(f"\n處理 {ch.name}...")
         # 讀內帳
         internal = read_internal(internal_path, ch.label)
         if not internal:
             print(f"  警告：內帳中 {ch.label} 無資料")
 
         # 讀明細
-        detail_path = os.path.join(base_dir, ch.detail_file)
+        detail_path = os.path.join(folder_path, ch.detail_file)
         if not os.path.exists(detail_path):
-            print(f"  警告：找不到 {ch.detail_file}，跳過")
+            print(f"  警告：找不到 {ch.detail_file}，跳過此管道")
             continue
         detail = ch.parser(detail_path, year, month)
-        print(f"  內帳 {len(internal)} 天，明細 {len(detail)} 天")
+        print(f"  {ch.name}：內帳 {len(internal)} 天，明細 {len(detail)} 天")
 
         channels_data.append((ch.name, internal, detail))
 
     if not channels_data:
-        print("\n沒有可比對的資料")
-        input("按 Enter 結束...")
+        print(f"  沒有可比對的資料，跳過")
         return
 
     # 比對
     df = compare_all(channels_data, year, month)
 
     # 輸出
-    output_name = f"對帳結果_{year}{month:02d}.xlsx"
-    output_path = os.path.join(base_dir, output_name)
     df.to_excel(output_path, index=False, sheet_name='對帳結果')
-
-    # 套用格式
     style_output(output_path, df)
+    print(f"  完成！已輸出：{output_name}")
 
-    print(f"\n完成！已輸出：{output_name}")
+
+def main():
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    report_dir = os.path.join(base_dir, '報表')
+
+    if not os.path.isdir(report_dir):
+        print("錯誤：找不到「報表」資料夾")
+        input("按 Enter 結束...")
+        return
+
+    # 掃描所有月份資料夾
+    folders = sorted([
+        d for d in os.listdir(report_dir)
+        if os.path.isdir(os.path.join(report_dir, d)) and re.match(r'^\d{6}$', d)
+    ])
+
+    if not folders:
+        print("報表/ 底下沒有月份資料夾（格式：YYYYMM）")
+        input("按 Enter 結束...")
+        return
+
+    print(f"找到 {len(folders)} 個月份資料夾：{', '.join(folders)}\n")
+
+    for folder_name in folders:
+        folder_path = os.path.join(report_dir, folder_name)
+        print(f"[{folder_name}]")
+        process_folder(folder_path, folder_name)
+        print()
+
     input("按 Enter 結束...")
 
 
