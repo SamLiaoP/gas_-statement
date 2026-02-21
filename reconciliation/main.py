@@ -66,8 +66,8 @@ def parse_cpc(filepath: str, year: int, month: int) -> DayAmount:
 
 
 CHANNELS = [
-    ChannelConfig("LINE PAY", "LINE PAY", "linepay_detail.xlsx", parse_linepay),
-    ChannelConfig("中油PAY", "中油PAY(CPC)", "cpc_detail.xls", parse_cpc),
+    ChannelConfig("LINE PAY", "LINE PAY", "linepay明細.xlsx", parse_linepay),
+    ChannelConfig("中油PAY", "中油PAY(CPC)", "中油pay明細.xls", parse_cpc),
 ]
 
 
