@@ -7,8 +7,8 @@
 #   3. 讀取內帳金額表 sheet，解析各支付管道每日金額
 #   4. 讀取各支付管道明細檔，解析每日交易金額
 #   5. 比對內帳 vs 明細，產出對帳結果 Excel（含差異標記和紅色高亮）
-# 輸入：reports/{YYYYMM}/115.XX.xlsx（內帳）、linepay_detail.xlsx、cpc_detail.xls
-# 輸出：reports/{YYYYMM}/reconciliation_YYYYMM.xlsx
+# 輸入：reports/{YYYYMM}/115.XX.xlsx（內帳）、linepay明細.xlsx、中油pay明細.xls
+# 輸出：reports/{YYYYMM}/對帳結果_YYYYMM.xlsx
 # 執行方式：按兩下 main.py 或 python3 main.py
 ### End Spec ###
 
@@ -198,7 +198,7 @@ def style_output(filepath: str, df: pd.DataFrame):
 
 def process_folder(folder_path: str, folder_name: str):
     """處理單一月份資料夾的對帳"""
-    output_name = f"reconciliation_{folder_name}.xlsx"
+    output_name = f"對帳結果_{folder_name}.xlsx"
     output_path = os.path.join(folder_path, output_name)
     if os.path.exists(output_path):
         print(f"  已有 {output_name}，跳過")

@@ -1,14 +1,14 @@
 ### Spec ###
 # LinePay 匯款明細整理程式
-# 用途：將 linepay_detail.xlsx 的交易資料按「撥款預定日」分組整理
+# 用途：將 linepay明細.xlsx 的交易資料按「撥款預定日」分組整理
 # 主要功能：
 #   1. 掃描 reports/ 底下所有月份資料夾（YYYYMM），自動判斷哪些尚未處理
-#   2. 讀取資料夾內的 linepay_detail.xlsx
+#   2. 讀取資料夾內的 linepay明細.xlsx
 #   3. 以撥款預定日為大分類，每個撥款預定日底下按交易日分組
 #   4. 加總每個交易日的付款金額、手續費合計、排定的各項目撥款（實收）
 #   5. 輸出格式化 Excel，含合併儲存格、粗體、千分位、小計與總計
-# 輸入：reports/{YYYYMM}/linepay_detail.xlsx
-# 輸出：reports/{YYYYMM}/linepay_summary_YYYYMM.xlsx
+# 輸入：reports/{YYYYMM}/linepay明細.xlsx
+# 輸出：reports/{YYYYMM}/LinePay匯款明細整理_YYYYMM.xlsx
 # 關聯：參考 reconciliation 程式的 base_dir 定位方式與 openpyxl 格式模式
 ### End Spec ###
 
@@ -29,15 +29,15 @@ def fmt_date(d):
 
 def process_folder(folder_path: str, folder_name: str):
     """處理單一月份資料夾的 LinePay 匯款明細整理"""
-    output_name = f"linepay_summary_{folder_name}.xlsx"
+    output_name = f"LinePay匯款明細整理_{folder_name}.xlsx"
     output_path = os.path.join(folder_path, output_name)
     if os.path.exists(output_path):
         print(f"  已有 {output_name}，跳過")
         return
 
-    filepath = os.path.join(folder_path, 'linepay_detail.xlsx')
+    filepath = os.path.join(folder_path, 'linepay明細.xlsx')
     if not os.path.exists(filepath):
-        print(f"  找不到 linepay_detail.xlsx，跳過")
+        print(f"  找不到 linepay明細.xlsx，跳過")
         return
 
     df = pd.read_excel(filepath)
