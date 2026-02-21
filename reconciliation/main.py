@@ -2,13 +2,13 @@
 # 加油站支付對帳系統
 # 用途：自動比對內帳（115.XX.xlsx）與各支付管道（LinePay、中油Pay）的交易明細
 # 主要功能：
-#   1. 掃描 報表/ 底下所有月份資料夾（YYYYMM），自動判斷哪些尚未處理
+#   1. 掃描 reports/ 底下所有月份資料夾（YYYYMM），自動判斷哪些尚未處理
 #   2. 自動偵測資料夾內的內帳檔案（NNN.MM.xlsx 格式）
 #   3. 讀取內帳金額表 sheet，解析各支付管道每日金額
 #   4. 讀取各支付管道明細檔，解析每日交易金額
 #   5. 比對內帳 vs 明細，產出對帳結果 Excel（含差異標記和紅色高亮）
-# 輸入：報表/{YYYYMM}/115.XX.xlsx（內帳）、linepay明細.xlsx、中油pay明細.xls
-# 輸出：報表/{YYYYMM}/對帳結果_YYYYMM.xlsx
+# 輸入：reports/{YYYYMM}/115.XX.xlsx（內帳）、linepay_detail.xlsx、cpc_detail.xls
+# 輸出：reports/{YYYYMM}/reconciliation_YYYYMM.xlsx
 # 執行方式：按兩下 main.py 或 python3 main.py
 ### End Spec ###
 
@@ -66,8 +66,8 @@ def parse_cpc(filepath: str, year: int, month: int) -> DayAmount:
 
 
 CHANNELS = [
-    ChannelConfig("LINE PAY", "LINE PAY", "linepay明細.xlsx", parse_linepay),
-    ChannelConfig("中油PAY", "中油PAY(CPC)", "中油pay明細.xls", parse_cpc),
+    ChannelConfig("LINE PAY", "LINE PAY", "linepay_detail.xlsx", parse_linepay),
+    ChannelConfig("中油PAY", "中油PAY(CPC)", "cpc_detail.xls", parse_cpc),
 ]
 
 
@@ -126,7 +126,6 @@ def compare_all(channels_data: list, year: int, month: int) -> pd.DataFrame:
     比對所有管道，產出合併 DataFrame
     channels_data: [(name, internal_data, detail_data), ...]
     """
-    # 收集所有有資料的日期
     all_days = set()
     for name, internal, detail in channels_data:
         all_days.update(internal.keys())
@@ -169,32 +168,27 @@ def style_output(filepath: str, df: pd.DataFrame):
     red_fill = PatternFill(start_color='FFCCCC', end_color='FFCCCC', fill_type='solid')
     red_font = Font(color='CC0000')
 
-    # 找每個管道的「狀態」欄位置（1-based）
     status_cols = []
     for col_idx, col_name in enumerate(df.columns, 1):
         if col_name.endswith('狀態'):
             status_cols.append(col_idx)
 
-    # 只把值為 X 的狀態欄標紅
     for row_idx in range(2, ws.max_row + 1):
         for sc in status_cols:
             if ws.cell(row=row_idx, column=sc).value == 'X':
                 ws.cell(row=row_idx, column=sc).fill = red_fill
                 ws.cell(row=row_idx, column=sc).font = red_font
 
-    # 數字欄加千分位格式
     for col_idx, col_name in enumerate(df.columns, 1):
         if any(col_name.endswith(s) for s in ['內帳', '明細', '差異']):
             for row_idx in range(2, ws.max_row + 1):
                 ws.cell(row=row_idx, column=col_idx).number_format = '#,##0'
 
-    # 自動調整欄寬
     for col in ws.columns:
         max_len = 0
         col_letter = col[0].column_letter
         for cell in col:
             val = str(cell.value) if cell.value else ''
-            # 中文字算2個寬度
             width = sum(2 if ord(c) > 127 else 1 for c in val)
             max_len = max(max_len, width)
         ws.column_dimensions[col_letter].width = max_len + 2
@@ -204,14 +198,12 @@ def style_output(filepath: str, df: pd.DataFrame):
 
 def process_folder(folder_path: str, folder_name: str):
     """處理單一月份資料夾的對帳"""
-    # 檢查輸出檔是否已存在
-    output_name = f"對帳結果_{folder_name}.xlsx"
+    output_name = f"reconciliation_{folder_name}.xlsx"
     output_path = os.path.join(folder_path, output_name)
     if os.path.exists(output_path):
         print(f"  已有 {output_name}，跳過")
         return
 
-    # 找內帳
     result = find_internal_file(folder_path)
     if result is None:
         print(f"  找不到內帳檔案，跳過")
@@ -221,12 +213,10 @@ def process_folder(folder_path: str, folder_name: str):
 
     channels_data = []
     for ch in CHANNELS:
-        # 讀內帳
         internal = read_internal(internal_path, ch.label)
         if not internal:
             print(f"  警告：內帳中 {ch.label} 無資料")
 
-        # 讀明細
         detail_path = os.path.join(folder_path, ch.detail_file)
         if not os.path.exists(detail_path):
             print(f"  警告：找不到 {ch.detail_file}，跳過此管道")
@@ -240,10 +230,8 @@ def process_folder(folder_path: str, folder_name: str):
         print(f"  沒有可比對的資料，跳過")
         return
 
-    # 比對
     df = compare_all(channels_data, year, month)
 
-    # 輸出
     df.to_excel(output_path, index=False, sheet_name='對帳結果')
     style_output(output_path, df)
     print(f"  完成！已輸出：{output_name}")
@@ -251,21 +239,20 @@ def process_folder(folder_path: str, folder_name: str):
 
 def main():
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    report_dir = os.path.join(base_dir, '報表')
+    report_dir = os.path.join(base_dir, 'reports')
 
     if not os.path.isdir(report_dir):
-        print("錯誤：找不到「報表」資料夾")
+        print("錯誤：找不到「reports」資料夾")
         input("按 Enter 結束...")
         return
 
-    # 掃描所有月份資料夾
     folders = sorted([
         d for d in os.listdir(report_dir)
         if os.path.isdir(os.path.join(report_dir, d)) and re.match(r'^\d{6}$', d)
     ])
 
     if not folders:
-        print("報表/ 底下沒有月份資料夾（格式：YYYYMM）")
+        print("reports/ 底下沒有月份資料夾（格式：YYYYMM）")
         input("按 Enter 結束...")
         return
 

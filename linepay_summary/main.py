@@ -1,15 +1,15 @@
 ### Spec ###
 # LinePay 匯款明細整理程式
-# 用途：將 linepay明細.xlsx 的交易資料按「撥款預定日」分組整理
+# 用途：將 linepay_detail.xlsx 的交易資料按「撥款預定日」分組整理
 # 主要功能：
-#   1. 掃描 報表/ 底下所有月份資料夾（YYYYMM），自動判斷哪些尚未處理
-#   2. 讀取資料夾內的 linepay明細.xlsx
+#   1. 掃描 reports/ 底下所有月份資料夾（YYYYMM），自動判斷哪些尚未處理
+#   2. 讀取資料夾內的 linepay_detail.xlsx
 #   3. 以撥款預定日為大分類，每個撥款預定日底下按交易日分組
 #   4. 加總每個交易日的付款金額、手續費合計、排定的各項目撥款（實收）
 #   5. 輸出格式化 Excel，含合併儲存格、粗體、千分位、小計與總計
-# 輸入：報表/{YYYYMM}/linepay明細.xlsx
-# 輸出：報表/{YYYYMM}/LinePay匯款明細整理_YYYYMM.xlsx
-# 關聯：參考電子支付對帳程式的 base_dir 定位方式與 openpyxl 格式模式
+# 輸入：reports/{YYYYMM}/linepay_detail.xlsx
+# 輸出：reports/{YYYYMM}/linepay_summary_YYYYMM.xlsx
+# 關聯：參考 reconciliation 程式的 base_dir 定位方式與 openpyxl 格式模式
 ### End Spec ###
 
 import os
@@ -29,31 +29,26 @@ def fmt_date(d):
 
 def process_folder(folder_path: str, folder_name: str):
     """處理單一月份資料夾的 LinePay 匯款明細整理"""
-    # 檢查輸出檔是否已存在
-    output_name = f"LinePay匯款明細整理_{folder_name}.xlsx"
+    output_name = f"linepay_summary_{folder_name}.xlsx"
     output_path = os.path.join(folder_path, output_name)
     if os.path.exists(output_path):
         print(f"  已有 {output_name}，跳過")
         return
 
-    # 檢查輸入檔
-    filepath = os.path.join(folder_path, 'linepay明細.xlsx')
+    filepath = os.path.join(folder_path, 'linepay_detail.xlsx')
     if not os.path.exists(filepath):
-        print(f"  找不到 linepay明細.xlsx，跳過")
+        print(f"  找不到 linepay_detail.xlsx，跳過")
         return
 
-    # 讀取資料
     df = pd.read_excel(filepath)
     print(f"  讀取 {len(df)} 筆交易")
 
-    # 分組：撥款預定日 -> 交易日 -> 加總
     grouped = df.groupby(['撥款預定日', '交易日']).agg(
         付款金額=('付款金額', 'sum'),
         手續費=('手續費合計', 'sum'),
         實收=('排定的各項目撥款', 'sum'),
     ).reset_index().sort_values(['撥款預定日', '交易日'])
 
-    # 建立 Excel
     wb = Workbook()
     ws = wb.active
     ws.title = '匯款明細整理'
@@ -70,7 +65,6 @@ def process_folder(folder_path: str, folder_name: str):
         bottom=Side(style='thin', color='CCCCCC'),
     )
 
-    # 欄寬
     col_widths = [16, 14, 14, 14, 12]
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
@@ -81,7 +75,6 @@ def process_folder(folder_path: str, folder_name: str):
     grand_received = 0
 
     for payout_date, group in grouped.groupby('撥款預定日'):
-        # 撥款預定日標題列
         ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=5)
         cell = ws.cell(row=row, column=1, value=f"撥款預定日: {fmt_date(payout_date)}")
         cell.font = group_font
@@ -90,7 +83,6 @@ def process_folder(folder_path: str, folder_name: str):
             ws.cell(row=row, column=c).fill = group_fill
         row += 1
 
-        # 欄位標題
         headers = ['交易日', '付款金額', '手續費', '實收', '手續費比例']
         for c, h in enumerate(headers, 1):
             cell = ws.cell(row=row, column=c, value=h)
@@ -99,7 +91,6 @@ def process_folder(folder_path: str, folder_name: str):
             cell.alignment = Alignment(horizontal='center')
         row += 1
 
-        # 資料列
         sub_payment = 0
         sub_fee = 0
         sub_received = 0
@@ -110,7 +101,6 @@ def process_folder(folder_path: str, folder_name: str):
             ws.cell(row=row, column=3, value=round(r['手續費'], 2))
             ws.cell(row=row, column=4, value=round(r['實收'], 2))
 
-            # 手續費比例
             payment = int(r['付款金額'])
             ratio = r['手續費'] / payment if payment else 0
             ws.cell(row=row, column=5, value=ratio)
@@ -127,7 +117,6 @@ def process_folder(folder_path: str, folder_name: str):
             sub_received += r['實收']
             row += 1
 
-        # 小計列
         ws.cell(row=row, column=1, value='小計')
         ws.cell(row=row, column=2, value=sub_payment)
         ws.cell(row=row, column=3, value=round(sub_fee, 2))
@@ -142,14 +131,12 @@ def process_folder(folder_path: str, folder_name: str):
             ws.cell(row=row, column=c).font = subtotal_font
         row += 1
 
-        # 空行
         row += 1
 
         grand_payment += sub_payment
         grand_fee += sub_fee
         grand_received += sub_received
 
-    # 總計列
     ws.cell(row=row, column=1, value='總計')
     ws.cell(row=row, column=2, value=grand_payment)
     ws.cell(row=row, column=3, value=round(grand_fee, 2))
@@ -173,21 +160,20 @@ def process_folder(folder_path: str, folder_name: str):
 
 def main():
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    report_dir = os.path.join(base_dir, '報表')
+    report_dir = os.path.join(base_dir, 'reports')
 
     if not os.path.isdir(report_dir):
-        print("錯誤：找不到「報表」資料夾")
+        print("錯誤：找不到「reports」資料夾")
         input("按 Enter 結束...")
         return
 
-    # 掃描所有月份資料夾
     folders = sorted([
         d for d in os.listdir(report_dir)
         if os.path.isdir(os.path.join(report_dir, d)) and re.match(r'^\d{6}$', d)
     ])
 
     if not folders:
-        print("報表/ 底下沒有月份資料夾（格式：YYYYMM）")
+        print("reports/ 底下沒有月份資料夾（格式：YYYYMM）")
         input("按 Enter 結束...")
         return
 

@@ -48,3 +48,23 @@
 - 輸入/輸出統一放在 `報表/{YYYYMM}/` 資料夾內
 - 資料夾名稱須為6位數字（YYYYMM），其他名稱會被忽略
 - 已有輸出檔的月份自動跳過，避免重複處理
+
+## 2026-02-21 - 路徑全面改為英文（解決 Windows 中文路徑問題）
+
+### 變更內容
+- 資料夾重新命名：
+  - `電子支付對帳程式/` → `reconciliation/`
+  - `LinePay匯款明細整理/` → `linepay_summary/`
+  - `報表/` → `reports/`
+- 輸入檔案名稱：
+  - `linepay明細.xlsx` → `linepay_detail.xlsx`
+  - `中油pay明細.xls` → `cpc_detail.xls`
+- 輸出檔案名稱：
+  - `對帳結果_YYYYMM.xlsx` → `reconciliation_YYYYMM.xlsx`
+  - `LinePay匯款明細整理_YYYYMM.xlsx` → `linepay_summary_YYYYMM.xlsx`
+- 執行腳本重新命名：
+  - `執行對帳.bat/.command` → `run_reconciliation.bat/.command`
+  - `執行匯款明細整理.bat/.command` → `run_linepay_summary.bat/.command`
+
+### 原因
+- Windows 上中文路徑可能造成編碼錯誤，改為全英文路徑確保跨平台相容
